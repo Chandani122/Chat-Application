@@ -1,0 +1,4 @@
+websockets
+firebase-admin
+cryptography
+python-dotenv
