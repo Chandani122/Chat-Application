@@ -72,33 +72,36 @@ async def handle_file_message(websocket, data):
     try:
         sender_id = data.get('sender_id')
         receiver_id = data.get('receiver_id')
-        file_content = data.get('file_content')
+        file_content = data.get('file_content')  # base64 file content
         filename = data.get('filename')
         
         if not all([sender_id, receiver_id, file_content, filename]):
             raise ValueError("Missing required file data")
 
         try:
-            file_data = base64.b64decode(file_content)
-            encrypted_file = cipher_suite.encrypt(file_data)
+            file_data = base64.b64decode(file_content)  # Decoding the base64 file content
+            encrypted_file = cipher_suite.encrypt(file_data)  # Optional encryption
         except Exception as e:
             raise ValueError(f"Invalid file content: {str(e)}")
 
         chat_ids = sorted([sender_id, receiver_id])
         chat_room_id = f"{chat_ids[0]}_{chat_ids[1]}"
         
+        # Store file metadata in Firestore
         file_message = {
             'sender_id': sender_id,
             'receiver_id': receiver_id,
             'filename': filename,
-            'content': base64.b64encode(encrypted_file).decode(),
+            'content': base64.b64encode(encrypted_file).decode(),  # Send encrypted file as base64
             'timestamp': datetime.now().isoformat(),
             'type': 'file'
         }
-        
+
+        # Store the message in Firebase database
         chat_ref = db.reference(f'chats/{chat_room_id}/messages')
         message_ref = chat_ref.push(file_message)
         
+        # Notify the receiver about the new file
         if receiver_id in connected_clients:
             notification = {
                 'type': 'file',
@@ -109,7 +112,7 @@ async def handle_file_message(websocket, data):
                 'timestamp': file_message['timestamp']
             }
             await connected_clients[receiver_id].send(json.dumps(notification))
-        
+
         return True
         
     except Exception as e:

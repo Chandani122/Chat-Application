@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
@@ -19,7 +20,12 @@ class ChatService {
   Function(Map<String, dynamic>)? onFileReceived;
   Function(bool)? onConnectionStateChanged;
 
+  String _lastAuthToken = '';
+
   Future<void> connect(String authToken) async {
+    _lastAuthToken = authToken;
+    _isConnected = false;
+
     try {
       _channel = IOWebSocketChannel.connect(
         Uri.parse('$_serverUrl?token=$authToken'),
@@ -31,44 +37,47 @@ class ChatService {
       );
 
       _channel?.stream.listen(
-        (message) {
-          try {
-            final data = json.decode(message);
-
-            if (data['type'] == 'auth_response' && data['success']) {
-              _userId = data['user_id'];
-              _isConnected = true;
-              onConnectionStateChanged?.call(true);
-            } else if (data['type'] == 'message' && onMessageReceived != null) {
-              onMessageReceived!(data);
-            } else if (data['type'] == 'file' && onFileReceived != null) {
-              onFileReceived!(data);
-            } else if (data['type'] == 'error') {
-              print('Server error: ${data['message']}');
-            }
-          } catch (e) {
-            print('Error processing message: $e');
-          }
-        },
-        onError: (error) {
-          print('WebSocket error: $error');
-          _handleConnectionError();
-        },
-        onDone: () {
-          print('WebSocket connection closed');
-          _handleConnectionError();
-        },
+        (message) => _processMessage(message),
+        onError: (error) => _handleConnectionError(error),
+        onDone: _handleConnectionClosed,
       );
 
       await _authenticate(authToken);
     } catch (e) {
       print('Connection error: $e');
-      _handleConnectionError();
-      rethrow;
+      _handleConnectionError(e);
     }
   }
 
-  void _handleConnectionError() {
+  void _processMessage(dynamic message) {
+    try {
+      final data = json.decode(message);
+
+      if (data['type'] == 'auth_response' && data['success']) {
+        _userId = data['user_id'];
+        _isConnected = true;
+        onConnectionStateChanged?.call(true);
+      } else if (data['type'] == 'message' && onMessageReceived != null) {
+        onMessageReceived!(data);
+      } else if (data['type'] == 'file' && onFileReceived != null) {
+        onFileReceived!(data);
+      } else if (data['type'] == 'error') {
+        print('Server error: ${data['message']}');
+      }
+    } catch (e) {
+      print('Error processing message: $e');
+    }
+  }
+
+  void _handleConnectionError(dynamic error) {
+    print('WebSocket error: $error');
+    _isConnected = false;
+    onConnectionStateChanged?.call(false);
+    _reconnect();
+  }
+
+  void _handleConnectionClosed() {
+    print('WebSocket connection closed');
     _isConnected = false;
     onConnectionStateChanged?.call(false);
     _reconnect();
@@ -76,30 +85,30 @@ class ChatService {
 
   Future<void> _reconnect() async {
     await Future.delayed(const Duration(seconds: 5));
-    try {
-      if (!_isConnected) {
-        connect(_lastAuthToken);
-      }
-    } catch (e) {
-      print('Reconnection failed: $e');
+    if (!_isConnected && _lastAuthToken.isNotEmpty) {
+      print('Attempting to reconnect...');
+      connect(_lastAuthToken);
     }
   }
 
-  String _lastAuthToken = '';
-
   Future<void> _authenticate(String authToken) async {
-    _lastAuthToken = authToken;
-    _channel?.sink.add(json.encode({
-      'type': 'authentication',
-      'auth_token': authToken,
-    }));
+    try {
+      _channel?.sink.add(json.encode({
+        'type': 'authentication',
+        'auth_token': authToken,
+      }));
+
+      await Future.delayed(Duration(seconds: 5));
+      if (!_isConnected) throw Exception("Authentication timed out");
+    } catch (e) {
+      print("Authentication error: $e");
+      _handleConnectionError(e);
+    }
   }
 
   Future<void> sendMessage(String receiverId, Map message) async {
     try {
-      if (!_isConnected) {
-        throw Exception('Not connected to chat server');
-      }
+      if (!_isConnected) throw Exception('Not connected to chat server');
 
       final encryptedContent = _encryptMessage(message['content']);
       final messageToSend = {
@@ -110,7 +119,6 @@ class ChatService {
       _channel?.sink.add(json.encode(messageToSend));
     } catch (e) {
       print('Error sending message: $e');
-      rethrow;
     }
   }
 

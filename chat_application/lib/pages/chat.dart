@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../services/chat_service.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'message.dart';
+import 'dart:io';
 
 class ChatScreen extends StatefulWidget {
   final String receiverId;
@@ -26,7 +29,6 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final List<Map<String, dynamic>> _messages = [];
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
   bool _isLoading = false;
   bool _isOnline = false;
   String? _error;
@@ -187,16 +189,25 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  void _handleFile(Map<String, dynamic> fileData) {
-    setState(() {
-      final existingIndex =
-          _messages.indexWhere((m) => m['id'] == fileData['id']);
-      if (existingIndex >= 0) {
-        _messages[existingIndex] = {...fileData, 'type': 'file'};
-      } else {
-        _messages.insert(0, {...fileData, 'type': 'file'});
-      }
-    });
+  void _handleFile(Map<String, dynamic> fileData) async {
+    // Base64 decode the file content received from WebSocket
+    final fileContent = base64Decode(fileData['content']);
+    final filename = fileData['filename'];
+
+    // Save the file to local storage (or show it in the app)
+    // For example, save to the device storage using the path_provider package
+    final directory = await getApplicationDocumentsDirectory();
+    final filePath = '${directory.path}/$filename';
+    final file = File(filePath);
+
+    await file.writeAsBytes(fileContent);
+
+    // Notify user or update the UI
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('File received: $filename')));
+
+    // Optionally, display or open the file (if it's an image, pdf, etc.)
+    // For example, open the file using a Flutter package such as open_file
   }
 
   Future<void> _sendMessage() async {
@@ -232,10 +243,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       // If online, send through WebSocket
       if (_isOnline) {
-        await _chatService.sendMessage(
-          widget.receiverId,
-          messageWithId,
-        );
+        await _chatService.sendMessage(widget.receiverId, messageWithId);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -260,33 +268,44 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles();
-
       if (result == null) return;
 
       setState(() => _isLoading = true);
 
       final file = result.files.first;
-      final String fileName =
-          '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
-      final Reference ref =
-          _storage.ref().child('chat_files/$_chatRoomId/$fileName');
+      if (file.path == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No file path available')),
+        );
+        return;
+      }
 
-      final UploadTask uploadTask = ref.putData(file.bytes!);
-      final TaskSnapshot snapshot = await uploadTask;
-      final String downloadUrl = await snapshot.ref.getDownloadURL();
+      final selectedFile = File(file.path!);
+      final fileSize = await selectedFile.length();
 
+      if (fileSize > 10 * 1024 * 1024) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('File size must be less than 10MB')),
+        );
+        return;
+      }
+
+      // File metadata (No upload to Firebase Storage, just metadata storage)
       final fileMessage = {
         'type': 'file',
-        'content': downloadUrl,
+        'content': file.name, // Store the file name in Firestore
         'filename': file.name,
         'sender_id': _chatService.userId,
         'receiver_id': widget.receiverId,
         'timestamp': DateTime.now().toIso8601String(),
-        'fileSize': file.size,
-        'status': 'sent'
+        'fileSize': fileSize,
+        'status': 'sent', // Assuming it’s sent, can be pending if offline
+        'mimeType': file.extension != null
+            ? 'application/${file.extension!.toLowerCase()}'
+            : 'application/octet-stream',
       };
 
-      // Save to Firestore
+      // Save file metadata to Firestore
       final docRef = await _firestore
           .collection('chats')
           .doc(_chatRoomId)
@@ -302,15 +321,15 @@ class _ChatScreenState extends State<ChatScreen> {
         _messages.insert(0, messageWithId);
       });
 
-      // Send through WebSocket
-      await _chatService.sendMessage(
-        widget.receiverId,
-        messageWithId,
-      );
+      // Send the file message to the receiver via WebSocket (if online)
+      if (_isOnline) {
+        await _chatService.sendMessage(widget.receiverId, messageWithId);
+      }
     } catch (e) {
+      print('File processing error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error sending file: $e'),
+          content: Text('Error sending file: ${e.toString()}'),
           action: SnackBarAction(
             label: 'Retry',
             onPressed: _sendFile,
