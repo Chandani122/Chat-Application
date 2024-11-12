@@ -6,7 +6,7 @@ import 'package:encrypt/encrypt.dart' as encrypt;
 
 class ChatService {
   WebSocketChannel? _channel;
-  final String _serverUrl = 'ws://localhost:8765';
+  final String _serverUrl = <SERVER_URL>; //Enter your server url either localhost or deployed link
   final encrypt.Key _encryptionKey = encrypt.Key.fromSecureRandom(32);
   final encrypt.IV _iv = encrypt.IV.fromSecureRandom(16);
 

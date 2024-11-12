@@ -1,7 +1,7 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/chat_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -72,7 +72,7 @@ class _ChatScreenState extends State<ChatScreen> {
         setState(() => _error = e.toString());
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Unable to connect to chat server: $e'),
+            content: const Text('Unable to connect to chat server'),
             action: SnackBarAction(
               label: 'Retry',
               onPressed: _setupChatService,
@@ -113,7 +113,6 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       });
 
-      // Set up real-time updates
       _firestore
           .collection('chats')
           .doc(_chatRoomId)
@@ -123,9 +122,9 @@ class _ChatScreenState extends State<ChatScreen> {
           .snapshots()
           .listen(_handleFirestoreUpdate);
     } catch (e) {
-      setState(() => _error = 'Error loading messages: $e');
+      setState(() => _error = 'Error loading messages');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading messages: $e')),
+        const SnackBar(content: Text('Error loading messages')),
       );
     }
   }
@@ -139,7 +138,6 @@ class _ChatScreenState extends State<ChatScreen> {
       'id': latestMessage.id,
     };
 
-    // Check if message already exists in local list
     final existingIndex =
         _messages.indexWhere((m) => m['id'] == messageData['id']);
 
@@ -160,7 +158,6 @@ class _ChatScreenState extends State<ChatScreen> {
       try {
         await _chatService.sendMessage(widget.receiverId, message);
 
-        // Update message status
         final messageIndex =
             _messages.indexWhere((m) => m['id'] == message['id']);
         if (messageIndex >= 0) {
@@ -172,7 +169,9 @@ class _ChatScreenState extends State<ChatScreen> {
           });
         }
       } catch (e) {
-        print('Error syncing pending message: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error')),
+        );
       }
     }
   }
@@ -190,24 +189,17 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _handleFile(Map<String, dynamic> fileData) async {
-    // Base64 decode the file content received from WebSocket
     final fileContent = base64Decode(fileData['content']);
     final filename = fileData['filename'];
 
-    // Save the file to local storage (or show it in the app)
-    // For example, save to the device storage using the path_provider package
     final directory = await getApplicationDocumentsDirectory();
     final filePath = '${directory.path}/$filename';
     final file = File(filePath);
 
     await file.writeAsBytes(fileContent);
 
-    // Notify user or update the UI
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text('File received: $filename')));
-
-    // Optionally, display or open the file (if it's an image, pdf, etc.)
-    // For example, open the file using a Flutter package such as open_file
   }
 
   Future<void> _sendMessage() async {
@@ -224,8 +216,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _messageController.clear();
 
-    try {
-      // Save to Firestore first
       final docRef = await _firestore
           .collection('chats')
           .doc(_chatRoomId)
@@ -237,25 +227,10 @@ class _ChatScreenState extends State<ChatScreen> {
         'id': docRef.id,
       };
 
-      setState(() {
-        _messages.insert(0, messageWithId);
-      });
 
-      // If online, send through WebSocket
       if (_isOnline) {
         await _chatService.sendMessage(widget.receiverId, messageWithId);
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error sending message: $e'),
-          action: SnackBarAction(
-            label: 'Retry',
-            onPressed: () => _sendMessage(),
-          ),
-        ),
-      );
-    }
   }
 
   Future<void> _sendFile() async {
@@ -290,22 +265,20 @@ class _ChatScreenState extends State<ChatScreen> {
         return;
       }
 
-      // File metadata (No upload to Firebase Storage, just metadata storage)
+      final fileBytes = await selectedFile.readAsBytes();
+      final fileBase64 = base64Encode(fileBytes);
+
       final fileMessage = {
         'type': 'file',
-        'content': file.name, // Store the file name in Firestore
+        'content': fileBase64,
         'filename': file.name,
         'sender_id': _chatService.userId,
         'receiver_id': widget.receiverId,
         'timestamp': DateTime.now().toIso8601String(),
         'fileSize': fileSize,
-        'status': 'sent', // Assuming it’s sent, can be pending if offline
-        'mimeType': file.extension != null
-            ? 'application/${file.extension!.toLowerCase()}'
-            : 'application/octet-stream',
+        'status': 'sent',
       };
 
-      // Save file metadata to Firestore
       final docRef = await _firestore
           .collection('chats')
           .doc(_chatRoomId)
@@ -321,15 +294,13 @@ class _ChatScreenState extends State<ChatScreen> {
         _messages.insert(0, messageWithId);
       });
 
-      // Send the file message to the receiver via WebSocket (if online)
       if (_isOnline) {
         await _chatService.sendMessage(widget.receiverId, messageWithId);
       }
     } catch (e) {
-      print('File processing error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error sending file: ${e.toString()}'),
+          content: const Text('Error sending file'),
           action: SnackBarAction(
             label: 'Retry',
             onPressed: _sendFile,
@@ -344,24 +315,32 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
+        backgroundColor: Colors.white,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.receiverName),
+            Text(
+              widget.receiverName,
+              style: GoogleFonts.dmSans(
+                  color: Colors.black,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w500),
+            ),
             if (_error != null)
               Text(
                 'Offline',
-                style: TextStyle(
-                  fontSize: 12,
+                style: GoogleFonts.dmSans(
+                  fontSize: 14,
                   color: Colors.red[300],
                 ),
               )
             else
               Text(
                 _isOnline ? 'Online' : 'Connecting...',
-                style: TextStyle(
-                  fontSize: 12,
+                style: GoogleFonts.dmSans(
+                  fontSize: 14,
                   color: _isOnline ? Colors.green[300] : Colors.grey[300],
                 ),
               ),
@@ -420,22 +399,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageInput() {
-    return Container(
+    return Padding(
       padding: const EdgeInsets.all(8.0),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        boxShadow: [
-          BoxShadow(
-            offset: const Offset(0, -2),
-            blurRadius: 4,
-            color: Colors.black.withOpacity(0.1),
-          ),
-        ],
-      ),
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.attach_file),
+            icon: const Icon(Icons.attach_file, size: 26, color: Colors.black),
             onPressed: _isLoading || !_isOnline ? null : _sendFile,
             color: _isOnline ? null : Colors.grey,
           ),
@@ -443,13 +412,15 @@ class _ChatScreenState extends State<ChatScreen> {
             child: TextField(
               controller: _messageController,
               decoration: InputDecoration(
+                labelStyle: GoogleFonts.dmSans(),
+                hintStyle: GoogleFonts.dmSans(),
                 hintText: _isOnline ? 'Type a message...' : 'Connecting...',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(20),
                   borderSide: BorderSide.none,
                 ),
                 filled: true,
-                fillColor: Theme.of(context).scaffoldBackgroundColor,
+                fillColor: Colors.white,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 8,
@@ -463,7 +434,11 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.send),
+            icon: const Icon(
+              Icons.send,
+              color: Colors.black,
+              size: 24,
+            ),
             onPressed: _isLoading ? null : _sendMessage,
             color: _messageController.text.trim().isEmpty
                 ? Colors.grey

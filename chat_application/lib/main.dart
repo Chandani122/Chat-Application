@@ -21,6 +21,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Chat Application',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
@@ -31,18 +32,18 @@ class MyApp extends StatelessWidget {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          
+
           if (snapshot.hasData) {
-            return ContactsScreen();
+            return const ContactsScreen();
           }
-          
-          return LoginScreen();
+
+          return const LoginScreen();
         },
       ),
       routes: {
-        '/login': (context) => LoginScreen(),
-        '/signup': (context) => SignupScreen(),
-        '/contacts': (context) => ContactsScreen(),
+        '/login': (context) => const LoginScreen(),
+        '/signup': (context) => const SignupScreen(),
+        '/contacts': (context) => const ContactsScreen(),
       },
     );
   }

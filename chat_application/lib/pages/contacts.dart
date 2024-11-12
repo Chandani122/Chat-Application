@@ -1,7 +1,9 @@
 import 'package:chat_application/pages/chat.dart';
+import 'package:chat_application/pages/groupchat.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
@@ -24,7 +26,6 @@ class _ContactsScreenState extends State<ContactsScreen> {
 
   Future<void> _initializeAuthToken() async {
     try {
-      // Get the Firebase ID token
       final User? user = _auth.currentUser;
       if (user != null) {
         final token = await user.getIdToken();
@@ -34,7 +35,6 @@ class _ContactsScreenState extends State<ContactsScreen> {
         });
       }
     } catch (e) {
-      print('Error getting auth token: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -48,7 +48,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error signing out: $e')),
+          const SnackBar(content: Text('Error signing out')),
         );
       }
     }
@@ -70,7 +70,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
             children: [
               const Text('Authentication error. Please try logging in again.'),
               ElevatedButton(
-                onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+                onPressed: () =>
+                    Navigator.pushReplacementNamed(context, '/login'),
                 child: const Text('Return to Login'),
               ),
             ],
@@ -80,11 +81,32 @@ class _ContactsScreenState extends State<ContactsScreen> {
     }
 
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Contacts'),
+        backgroundColor: Colors.white,
+        title: Text('Contacts',
+            style: GoogleFonts.dmSans(
+                color: Colors.black,
+                fontSize: 28,
+                fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: const Icon(
+              Icons.groups_outlined,
+              color: Colors.black,
+              size: 34,
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const GroupChatScreen()),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.logout, size: 26, color: Colors.black),
             onPressed: () => _handleLogout(context),
           ),
         ],
@@ -105,28 +127,38 @@ class _ContactsScreenState extends State<ContactsScreen> {
             itemBuilder: (context, index) {
               final userData = users[index].data() as Map<String, dynamic>;
               final username = userData['username'] as String;
-              
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Theme.of(context).primaryColor,
-                  child: Text(
-                    username[0].toUpperCase(),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ),
-                title: Text(username),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ChatScreen(
-                        receiverId: users[index].id,
-                        receiverName: username,
-                        authToken: _authToken!,
-                      ),
+
+              return Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.black38,
+                    child: Text(
+                      username[0].toUpperCase(),
+                      style: const TextStyle(color: Colors.white),
                     ),
-                  );
-                },
+                  ),
+                  title: Text(
+                    username,
+                    style: GoogleFonts.dmSans(
+                        color: Colors.black,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w500),
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ChatScreen(
+                          receiverId: users[index].id,
+                          receiverName: username,
+                          authToken: _authToken!,
+                        ),
+                      ),
+                    );
+                  },
+                ),
               );
             },
           );
