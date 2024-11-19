@@ -216,21 +216,20 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _messageController.clear();
 
-      final docRef = await _firestore
-          .collection('chats')
-          .doc(_chatRoomId)
-          .collection('messages')
-          .add(message);
+    final docRef = await _firestore
+        .collection('chats')
+        .doc(_chatRoomId)
+        .collection('messages')
+        .add(message);
 
-      final messageWithId = {
-        ...message,
-        'id': docRef.id,
-      };
+    final messageWithId = {
+      ...message,
+      'id': docRef.id,
+    };
 
-
-      if (_isOnline) {
-        await _chatService.sendMessage(widget.receiverId, messageWithId);
-      }
+    if (_isOnline) {
+      await _chatService.sendMessage(widget.receiverId, messageWithId);
+    }
   }
 
   Future<void> _sendFile() async {
@@ -379,7 +378,15 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(
+                    child: Center(
+                        child: Text(
+                    "Start chatting...",
+                    style: GoogleFonts.dmSans(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w300,
+                        color: Colors.black38),
+                  )))
                 : ListView.builder(
                     reverse: true,
                     itemCount: _messages.length,
